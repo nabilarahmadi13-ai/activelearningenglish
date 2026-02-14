@@ -351,7 +351,7 @@ if (SpeechRecognition) {
     recognition.onresult = (event) => {
         // PERBAIKAN HP: Kita turunkan syarat volume agar suara kecil di HP tetap terdeteksi
         // Jika suara masuk, kita proses. currentVolume tetap dikelola oleh Noise Gate.
-        if (currentVolume < 5) return; 
+        if (currentVolume < 1) return; 
 
         lastSpeechTimestamp = Date.now();
         let interimTranscript = "";
@@ -396,10 +396,16 @@ if (SpeechRecognition) {
 // --- 4. AUDIO & WAVEFORM (MODERN) ---
 async function startNoiseGate() {
     try {
-        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioContext.state === 'suspended') await audioContext.resume();
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // KRUSIAL UNTUK HP: Paksa resume jika statusnya suspended
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: true } });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
         analyser.fftSize = 256;
@@ -407,7 +413,10 @@ async function startNoiseGate() {
         
         updateVolumeMeter();
         drawWaveform();
-    } catch (err) { alert("Please allow microphone access!"); }
+    } catch (err) { 
+        alert("Microphone Error: Please check if you have allowed mic access in your browser settings."); 
+        console.error(err);
+    }
 }
 
 function updateVolumeMeter() {

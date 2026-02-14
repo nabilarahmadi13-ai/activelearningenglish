@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ale-v2.5';
+const CACHE_NAME = 'ale-v-final-fix';
 const assets = [
   './',
   './index.html',
