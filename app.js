@@ -54,25 +54,56 @@ const SENTENCE_PATTERNS = { compound: [ { pattern: /[.!?]\s*\w+[^.!?]+(and|but|o
 // QUESTION BANK UTUH
 const questionBank = { basic: [ { q: "What is your favorite hobby and why?", keys: ["hobby", "like", "love", "favorite", "because"] }, { q: "Tell me about your family members.", keys: ["family", "father", "mother", "brother", "sister"] }, { q: "Describe your typical daily routine.", keys: ["wake", "breakfast", "work", "school", "sleep"] }, { q: "What is your favorite food and how does it taste?", keys: ["food", "delicious", "taste", "eat", "cooking"] }, { q: "Describe your house or your bedroom.", keys: ["house", "room", "bed", "live", "stay", "comfortable"] }, { q: "What is the weather like today in your city?", keys: ["weather", "sunny", "rainy", "hot", "cold", "sky"] } ], intermediate: [ { q: "Do you prefer city life or country life?", keys: ["city", "countryside", "prefer", "quiet", "busy"] }, { q: "How has the internet changed our lives?", keys: ["internet", "technology", "change", "easier", "social"] }, { q: "What are the qualities of a good friend?", keys: ["friend", "honest", "trust", "loyal", "kind"] }, { q: "Describe a beautiful place you have visited.", keys: ["place", "visit", "beautiful", "view", "travel", "trip"] }, { q: "Why is it important to learn a second language?", keys: ["language", "english", "important", "communication", "learn", "world"] }, { q: "Do you think people work too hard nowadays?", keys: ["work", "hard", "busy", "balance", "lifestyle", "office"] } ], advanced: [ { q: "Discuss the pros and cons of Artificial Intelligence.", keys: ["intelligence", "automation", "future", "ethics", "advantage"] }, { q: "Describe a significant challenge you overcame.", keys: ["challenge", "overcome", "resilience", "problem", "solve"] }, { q: "Should university education be free for everyone?", keys: ["education", "university", "government", "tax", "opportunity"] }, { q: "How does social media affect our mental health?", keys: ["social media", "mental health", "anxiety", "platform", "impact", "user"] }, { q: "Discuss the importance of environmental conservation.", keys: ["environment", "conservation", "nature", "planet", "protection", "global"] }, { q: "How will technology change the job market in the future?", keys: ["technology", "job", "market", "future", "career", "skills"] } ] };
 
-// --- 3. SPEECH RECOGNITION SETUP (PERBAIKAN MOBILE) ---
+// --- 3. SPEECH RECOGNITION SETUP (SUPER DEBUG VERSION) ---
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+// DEBUG: Check browser support
+console.log("🔍 Browser Check:");
+console.log("- SpeechRecognition support:", !!SpeechRecognition);
+console.log("- Browser:", navigator.userAgent);
 
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+    
+    console.log("✅ Speech Recognition initialized");
+
+    recognition.onstart = () => {
+        console.log("🎤 Recognition STARTED");
+        updateDebugInfo("🎤 Recognition STARTED", "success");
+        const statusMsg = document.getElementById('status-msg');
+        if (statusMsg) {
+            statusMsg.innerHTML = "🎤 <strong>LISTENING...</strong> Speak now!";
+            statusMsg.style.color = "#22c55e";
+        }
+    };
 
     recognition.onresult = (event) => {
-        // PERBAIKAN KRUSIAL: Hapus volume check yang terlalu strict!
-        // Volume mic mobile sangat kecil, jadi kita ga pake volume threshold
-
+        console.log("📝 onResult triggered! Event:", event);
+        updateDebugInfo("📝 Transcript received", "success");
+        
         lastSpeechTimestamp = Date.now();
         let interimTranscript = "";
         const currentKeys = shuffledQuestions[questionIndex] ? shuffledQuestions[questionIndex].keys : [];
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
             let transcript = event.results[i][0].transcript;
+            const confidence = event.results[i][0].confidence;
+            
+            console.log(`📝 Result ${i}:`, {
+                text: transcript,
+                isFinal: event.results[i].isFinal,
+                confidence: confidence
+            });
+            
+            if (event.results[i].isFinal) {
+                updateDebugInfo(`✅ FINAL: "${transcript.substring(0, 30)}..."`, "success");
+            } else {
+                updateDebugInfo(`⏳ INTERIM: "${transcript.substring(0, 20)}..."`, "info");
+            }
             
             currentKeys.forEach(key => {
                 const regex = new RegExp(`\\b${key}\\b`, 'gi');
@@ -85,75 +116,175 @@ if (SpeechRecognition) {
 
             if (event.results[i].isFinal) {
                 finalTranscript += transcript + " ";
-                // PERBAIKAN: Log untuk debug
-                console.log("Final transcript captured:", transcript);
+                console.log("✅ FINAL transcript:", transcript);
             } else {
                 interimTranscript += transcript;
+                console.log("⏳ INTERIM transcript:", transcript);
             }
         }
 
         const liveDiv = document.getElementById('transcript-live');
         if (liveDiv) {
             liveDiv.innerHTML = `<span style="color:#1e293b">${finalTranscript}</span><span style="color:#94a3b8">${interimTranscript}</span>`;
+            console.log("✅ UI Updated with transcript");
+        } else {
+            console.error("❌ transcript-live div not found!");
+            updateDebugInfo("❌ transcript-live div not found!", "error");
         }
+        
         analyzeSpeaking(finalTranscript.toLowerCase());
     };
 
     recognition.onerror = (event) => {
-        console.error("Speech Error: " + event.error);
-        // PERBAIKAN: Tampilkan error ke user
+        console.error("❌ Speech Error:", event.error);
+        console.error("Error details:", event);
+        updateDebugInfo(`❌ Error: ${event.error}`, "error");
+        
         const statusMsg = document.getElementById('status-msg');
         if (statusMsg) {
-            statusMsg.innerText = "⚠️ Speech recognition error. Try again.";
+            let errorMsg = "⚠️ Error: ";
+            switch(event.error) {
+                case 'no-speech':
+                    errorMsg += "No speech detected. Try again.";
+                    break;
+                case 'audio-capture':
+                    errorMsg += "Mic not working!";
+                    break;
+                case 'not-allowed':
+                    errorMsg += "Mic permission denied!";
+                    break;
+                case 'network':
+                    errorMsg += "Network error!";
+                    break;
+                default:
+                    errorMsg += event.error;
+            }
+            statusMsg.innerHTML = errorMsg;
             statusMsg.style.color = "#ef4444";
         }
     };
 
     recognition.onend = () => {
-        // PERBAIKAN: Auto-restart jika masih recording
+        console.log("🛑 Recognition ended");
+        updateDebugInfo("🛑 Recognition ended", "warning");
+        
         if (isRecording) {
-            console.log("Recognition ended, restarting...");
-            try {
-                recognition.start();
-            } catch (e) {
-                console.log("Recognition restart failed:", e);
-            }
+            console.log("🔄 Auto-restarting recognition...");
+            updateDebugInfo("🔄 Auto-restarting...", "info");
+            setTimeout(() => {
+                try {
+                    recognition.start();
+                    console.log("✅ Recognition restarted");
+                    updateDebugInfo("✅ Restarted", "success");
+                } catch (e) {
+                    console.error("❌ Restart failed:", e);
+                    updateDebugInfo("❌ Restart failed: " + e.message, "error");
+                }
+            }, 100);
         }
     };
+    
+    recognition.onsoundstart = () => {
+        console.log("🔊 Sound detected!");
+        updateDebugInfo("🔊 Sound detected!", "success");
+        const statusMsg = document.getElementById('status-msg');
+        if (statusMsg) {
+            statusMsg.innerHTML = "🔊 <strong>SOUND DETECTED!</strong>";
+            statusMsg.style.color = "#22c55e";
+        }
+    };
+    
+    recognition.onspeechstart = () => {
+        console.log("🗣️ Speech started!");
+        updateDebugInfo("🗣️ Speech started!", "success");
+        const statusMsg = document.getElementById('status-msg');
+        if (statusMsg) {
+            statusMsg.innerHTML = "🗣️ <strong>SPEECH DETECTED!</strong>";
+            statusMsg.style.color = "#22c55e";
+        }
+    };
+    
+    recognition.onspeechend = () => {
+        console.log("🤐 Speech ended");
+        updateDebugInfo("🤐 Speech ended", "info");
+    };
+    
+    recognition.onaudiostart = () => {
+        console.log("🎵 Audio capture started");
+        updateDebugInfo("🎵 Audio capture started", "info");
+    };
+    
+    recognition.onaudioend = () => {
+        console.log("🎵 Audio capture ended");
+        updateDebugInfo("🎵 Audio capture ended", "info");
+    };
+    
 } else {
+    console.error("❌ Browser does NOT support Speech Recognition!");
     alert("Your browser does not support Speech Recognition. Please use Chrome or Safari.");
 }
 
-// --- 4. AUDIO & WAVEFORM (PERBAIKAN MOBILE) ---
+// --- 4. AUDIO & WAVEFORM (SUPER DEBUG VERSION) ---
 async function startNoiseGate() {
+    console.log("🎤 startNoiseGate called");
+    
     try {
-        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // Initialize AudioContext
+        if (!audioContext) {
+            console.log("📍 Creating new AudioContext...");
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.log("✅ AudioContext created:", audioContext.state);
+        }
         
-        // KRUSIAL UNTUK HP: AudioContext harus di-resume dalam user gesture
+        // Resume if suspended
         if (audioContext.state === 'suspended') {
+            console.log("⏸️ AudioContext suspended, resuming...");
             await audioContext.resume();
-            console.log("AudioContext resumed");
+            console.log("▶️ AudioContext resumed:", audioContext.state);
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        // Request microphone access
+        console.log("📍 Requesting microphone access...");
+        const constraints = {
             audio: {
                 echoCancellation: true,
                 noiseSuppression: true,
                 autoGainControl: true
             } 
-        });
+        };
+        console.log("Constraints:", constraints);
         
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("✅ Microphone access granted!");
+        console.log("Stream:", stream);
+        console.log("Audio tracks:", stream.getAudioTracks());
+        
+        // Create analyser
+        console.log("📍 Creating audio analyser...");
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
         analyser.fftSize = 256;
         microphone.connect(analyser);
+        console.log("✅ Audio analyser connected");
         
-        console.log("Audio initialized successfully");
+        console.log("🎉 Audio initialization complete!");
         updateVolumeMeter();
         drawWaveform();
+        
     } catch (err) { 
-        console.error("Microphone access error:", err);
-        alert("Please allow microphone access!"); 
+        console.error("❌ Microphone access error:", err);
+        console.error("Error name:", err.name);
+        console.error("Error message:", err.message);
+        
+        let errorMsg = "Microphone access failed!\n\n";
+        if (err.name === 'NotAllowedError') {
+            errorMsg += "Please allow microphone permission in your browser settings.";
+        } else if (err.name === 'NotFoundError') {
+            errorMsg += "No microphone found on your device.";
+        } else {
+            errorMsg += "Error: " + err.message;
+        }
+        alert(errorMsg);
     }
 }
 
@@ -204,80 +335,150 @@ function analyzeSpeaking(text) {
     return "valid";
 }
 
-// TOGGLE RECORDING (PERBAIKAN MOBILE)
+// TOGGLE RECORDING (SUPER DEBUG VERSION)
 async function toggleRecording() {
     const btn = document.getElementById('record-btn');
     const statusMsg = document.getElementById('status-msg');
     
+    console.log("🎬 toggleRecording called, isRecording:", isRecording);
+    updateDebugInfo(`🎬 Toggle recording (was: ${isRecording})`, "info");
+    
     if (!isRecording) {
         // START RECORDING
+        console.log("▶️ STARTING RECORDING...");
+        updateDebugInfo("▶️ STARTING RECORDING", "success");
         isRecording = true;
         btn.innerHTML = '<i class="fas fa-stop"></i>';
         btn.style.backgroundColor = "#ef4444";
+        
         if (statusMsg) {
-            statusMsg.innerText = "🎙️ Recording... Speak now";
-            statusMsg.style.color = "#ef4444";
+            statusMsg.innerHTML = "⏳ Initializing microphone...";
+            statusMsg.style.color = "#f59e0b";
         }
         
-        // PERBAIKAN: Start audio first
+        // STEP 1: Start Audio
+        console.log("📍 Step 1: Starting audio...");
+        updateDebugInfo("📍 Step 1: Starting audio", "info");
         await startNoiseGate(); 
+        console.log("✅ Step 1 complete: Audio initialized");
+        updateDebugInfo("✅ Step 1: Audio OK", "success");
         
-        // PERBAIKAN: Small delay before starting recognition
+        // STEP 2: Small delay
+        console.log("📍 Step 2: Waiting 500ms...");
         await new Promise(resolve => setTimeout(resolve, 500));
+        console.log("✅ Step 2 complete");
         
+        // STEP 3: Reset variables
+        console.log("📍 Step 3: Resetting variables...");
         lastSpeechTimestamp = Date.now();
         silencePenalty = 0;
-        finalTranscript = ""; 
+        finalTranscript = "";
         
-        // PERBAIKAN: Try-catch untuk recognition start
+        // Update UI
+        const liveDiv = document.getElementById('transcript-live');
+        if (liveDiv) {
+            liveDiv.innerHTML = '<span style="color:#94a3b8;">Listening... Speak now!</span>';
+        }
+        console.log("✅ Step 3 complete");
+        
+        // STEP 4: Start Speech Recognition
+        console.log("📍 Step 4: Starting speech recognition...");
+        updateDebugInfo("📍 Step 4: Starting speech recognition", "info");
         try {
             if (recognition) {
                 recognition.start();
-                console.log("Speech recognition started");
+                console.log("✅ Speech recognition start() called");
+                updateDebugInfo("✅ Recognition start() called", "success");
+                
+                if (statusMsg) {
+                    statusMsg.innerHTML = "🎤 <strong>RECORDING!</strong> Start speaking...";
+                    statusMsg.style.color = "#22c55e";
+                }
+            } else {
+                console.error("❌ Recognition object is null!");
+                updateDebugInfo("❌ Recognition is null!", "error");
+                alert("Speech recognition not initialized!");
+                return;
             }
         } catch (e) {
-            console.error("Recognition start error:", e);
-            // Mungkin sudah started, coba lanjutkan
+            console.error("❌ Recognition start error:", e);
+            updateDebugInfo("⚠️ Start error (may be OK): " + e.message, "warning");
+            console.log("ℹ️ This might be OK if already running");
         }
         
+        // STEP 5: Start timer
+        console.log("📍 Step 5: Starting timer...");
         timerInterval = setInterval(() => {
             seconds++;
-            document.getElementById('timer').innerText = new Date(seconds * 1000).toISOString().substr(14, 5);
-            if ((Date.now() - lastSpeechTimestamp) / 1000 > 5) silencePenalty += 0.2;
+            const timerEl = document.getElementById('timer');
+            if (timerEl) {
+                timerEl.innerText = new Date(seconds * 1000).toISOString().substr(14, 5);
+            }
+            if ((Date.now() - lastSpeechTimestamp) / 1000 > 5) {
+                silencePenalty += 0.2;
+            }
         }, 1000);
+        console.log("✅ Step 5 complete: Timer started");
+        
+        console.log("🎉 RECORDING STARTED SUCCESSFULLY!");
+        updateDebugInfo("🎉 Recording started!", "success");
+        
     } else {
         // STOP RECORDING
+        console.log("⏹️ STOPPING RECORDING...");
+        updateDebugInfo("⏹️ STOPPING RECORDING", "warning");
         isRecording = false;
         btn.innerHTML = '<i class="fas fa-microphone"></i>';
         btn.style.backgroundColor = "#4f46e5";
+        
         if (statusMsg) {
-            statusMsg.innerText = "✅ Recording stopped";
-            statusMsg.style.color = "#22c55e";
+            statusMsg.innerHTML = "⏹️ Recording stopped. Processing...";
+            statusMsg.style.color = "#64748b";
         }
         
+        // Stop recognition
         if (recognition) {
             try {
                 recognition.stop();
-                console.log("Speech recognition stopped");
+                console.log("✅ Speech recognition stopped");
+                updateDebugInfo("✅ Recognition stopped", "success");
             } catch (e) {
-                console.error("Recognition stop error:", e);
+                console.error("❌ Recognition stop error:", e);
+                updateDebugInfo("❌ Stop error: " + e.message, "error");
             }
         }
         
+        // Stop timer
         clearInterval(timerInterval);
-        cancelAnimationFrame(animationId);
+        console.log("✅ Timer stopped");
         
+        // Stop waveform
+        cancelAnimationFrame(animationId);
+        console.log("✅ Waveform stopped");
+        
+        // Close audio
         if (audioContext) {
             audioContext.close().then(() => {
                 audioContext = null;
-                console.log("AudioContext closed");
+                console.log("✅ AudioContext closed");
             });
         }
         
-        // PERBAIKAN: Log transcript untuk debug
-        console.log("Final transcript on stop:", finalTranscript);
+        // Log final state
+        console.log("📊 Final state:");
+        console.log("- Final transcript:", finalTranscript);
+        console.log("- Word count:", finalTranscript.split(/\s+/).length);
+        console.log("- Duration:", seconds, "seconds");
+        updateDebugInfo(`📊 Words: ${finalTranscript.split(/\s+/).length}, Duration: ${seconds}s`, "info");
+        
+        if (statusMsg) {
+            statusMsg.innerHTML = "✅ Recording complete! Click Next to continue.";
+            statusMsg.style.color = "#22c55e";
+        }
         
         document.getElementById('next-btn').classList.remove('hidden');
+        console.log("🎉 RECORDING STOPPED SUCCESSFULLY!");
+        updateDebugInfo("🎉 Recording stopped!", "success");
     }
 }
 
@@ -526,28 +727,50 @@ function startTest(level) {
 }
 
 function loadQuestion() {
+    console.log("📖 Loading question", questionIndex + 1);
+    
     seconds = 0;
     finalTranscript = "";
+    
     document.getElementById('timer').innerText = "00:00";
     document.getElementById('question-count').innerText = `Question ${questionIndex + 1}/3`;
     document.getElementById('level-tag').innerText = currentLevel.toUpperCase();
     document.getElementById('question-text').innerText = shuffledQuestions[questionIndex].q;
     document.getElementById('required-keywords').innerText = shuffledQuestions[questionIndex].keys.join(', ');
-    document.getElementById('transcript-live').innerText = "Waiting...";
+    
+    const liveDiv = document.getElementById('transcript-live');
+    if (liveDiv) {
+        liveDiv.innerHTML = '<span style="color:#94a3b8;">Ready to record. Click the microphone button.</span>';
+    }
+    
     document.getElementById('next-btn').classList.add('hidden');
     
-    // PERBAIKAN: Reset status message
+    // Reset status message
     const statusMsg = document.getElementById('status-msg');
     if (statusMsg) {
-        statusMsg.innerText = "Click to speak";
+        statusMsg.innerHTML = "🎤 Click microphone to start recording";
         statusMsg.style.color = "#64748b";
     }
+    
+    // Reset grammar status
+    const grammarStatus = document.getElementById('grammar-status');
+    if (grammarStatus) {
+        grammarStatus.style.display = 'none';
+    }
+    
+    console.log("✅ Question loaded:", shuffledQuestions[questionIndex].q);
+    console.log("Keywords:", shuffledQuestions[questionIndex].keys);
 }
 
 function goBackToLevels() { location.reload(); }
 function logout() { localStorage.removeItem('isLoggedInEmail'); location.reload(); }
 
 window.onload = () => {
+    console.log("🚀 App loaded!");
+    
+    // Create debug panel
+    createDebugPanel();
+    
     const savedEmail = localStorage.getItem('isLoggedInEmail');
     if (savedEmail) {
         activeUserEmail = savedEmail;
@@ -573,17 +796,16 @@ window.onload = () => {
         document.getElementById('auth-section').classList.add('hidden');
         document.getElementById('level-section').classList.remove('hidden');
         
-        // PERBAIKAN: Tampilkan transcript history dengan better formatting
+        // Display transcript history
         const historyData = localStorage.getItem('last_transcript_history');
         const historyDiv = document.getElementById('history-content');
         if (historyData && historyDiv) {
-            // Format transcript dengan line breaks untuk readability
             const formattedHistory = historyData.replace(/\n/g, '<br>');
             historyDiv.innerHTML = formattedHistory;
             document.getElementById('transcript-history').classList.remove('hidden');
-            console.log("Transcript history loaded successfully");
+            console.log("✅ Transcript history loaded");
         } else {
-            console.log("No transcript history found");
+            console.log("ℹ️ No transcript history found");
         }
     } else {
         document.getElementById('landing-page').classList.remove('hidden');
@@ -591,6 +813,105 @@ window.onload = () => {
         document.getElementById('nav-login-btn').classList.remove('hidden');
     }
 };
+
+function createDebugPanel() {
+    // Create debug panel HTML
+    const debugPanel = document.createElement('div');
+    debugPanel.id = 'debug-panel';
+    debugPanel.style.cssText = `
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        background: rgba(0,0,0,0.9);
+        color: #22c55e;
+        padding: 15px;
+        border-radius: 10px;
+        font-family: monospace;
+        font-size: 11px;
+        max-width: 300px;
+        max-height: 400px;
+        overflow-y: auto;
+        z-index: 9999;
+        display: none;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    `;
+    
+    debugPanel.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom: 1px solid #444; padding-bottom:5px;">
+            <strong style="color:#fff;">🐛 DEBUG PANEL</strong>
+            <button onclick="toggleDebugPanel()" style="background:#ef4444; color:white; border:none; padding:3px 8px; border-radius:5px; cursor:pointer; font-size:10px;">HIDE</button>
+        </div>
+        <div id="debug-content"></div>
+    `;
+    
+    document.body.appendChild(debugPanel);
+    
+    // Add toggle button to test section
+    const testSection = document.getElementById('test-section');
+    if (testSection) {
+        const toggleBtn = document.createElement('button');
+        toggleBtn.innerHTML = '🐛 DEBUG';
+        toggleBtn.onclick = toggleDebugPanel;
+        toggleBtn.style.cssText = `
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 9998;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4);
+        `;
+        toggleBtn.id = 'debug-toggle-btn';
+        document.body.appendChild(toggleBtn);
+    }
+    
+    console.log("✅ Debug panel created");
+}
+
+function toggleDebugPanel() {
+    const panel = document.getElementById('debug-panel');
+    const btn = document.getElementById('debug-toggle-btn');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        if (btn) btn.style.display = 'none';
+    } else {
+        panel.style.display = 'none';
+        if (btn) btn.style.display = 'block';
+    }
+}
+
+function updateDebugInfo(message, type = 'info') {
+    const debugContent = document.getElementById('debug-content');
+    if (!debugContent) return;
+    
+    const colors = {
+        info: '#22c55e',
+        warning: '#f59e0b',
+        error: '#ef4444',
+        success: '#10b981'
+    };
+    
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.style.cssText = `
+        padding: 5px 0;
+        border-bottom: 1px solid #333;
+        color: ${colors[type] || colors.info};
+    `;
+    entry.innerHTML = `<small style="color:#888;">[${time}]</small> ${message}`;
+    
+    debugContent.insertBefore(entry, debugContent.firstChild);
+    
+    // Keep only last 20 entries
+    while (debugContent.children.length > 20) {
+        debugContent.removeChild(debugContent.lastChild);
+    }
+}
 
 function goBackToHome() {
     document.getElementById('auth-section').classList.add('hidden');
