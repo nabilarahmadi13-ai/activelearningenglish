@@ -18,9 +18,9 @@ const FILLER_WORDS = ["uhm", "um", "err", "uh", "ah", "aa", "ee"];
 let currentLevel = "", questionIndex = 0, shuffledQuestions = [];
 let activeUserEmail = "", sessionScores = []; 
 
-// Audio State
+// Audio State - PERBAIKAN MOBILE
 let audioContext, analyser, microphone, currentVolume = 0;
-const VOLUME_THRESHOLD = 5; // PERBAIKAN: Diturunkan ke 5 agar lebih sensitif di HP
+const VOLUME_THRESHOLD = 0.1; // PERBAIKAN: Diturunkan drastis untuk mobile (dari 5 ke 0.1)
 
 // Kamus Grammar & Frasa (DI-KEEP UTUH)
 const GRAMMAR_RULES = {
@@ -54,7 +54,7 @@ const SENTENCE_PATTERNS = { compound: [ { pattern: /[.!?]\s*\w+[^.!?]+(and|but|o
 // QUESTION BANK UTUH
 const questionBank = { basic: [ { q: "What is your favorite hobby and why?", keys: ["hobby", "like", "love", "favorite", "because"] }, { q: "Tell me about your family members.", keys: ["family", "father", "mother", "brother", "sister"] }, { q: "Describe your typical daily routine.", keys: ["wake", "breakfast", "work", "school", "sleep"] }, { q: "What is your favorite food and how does it taste?", keys: ["food", "delicious", "taste", "eat", "cooking"] }, { q: "Describe your house or your bedroom.", keys: ["house", "room", "bed", "live", "stay", "comfortable"] }, { q: "What is the weather like today in your city?", keys: ["weather", "sunny", "rainy", "hot", "cold", "sky"] } ], intermediate: [ { q: "Do you prefer city life or country life?", keys: ["city", "countryside", "prefer", "quiet", "busy"] }, { q: "How has the internet changed our lives?", keys: ["internet", "technology", "change", "easier", "social"] }, { q: "What are the qualities of a good friend?", keys: ["friend", "honest", "trust", "loyal", "kind"] }, { q: "Describe a beautiful place you have visited.", keys: ["place", "visit", "beautiful", "view", "travel", "trip"] }, { q: "Why is it important to learn a second language?", keys: ["language", "english", "important", "communication", "learn", "world"] }, { q: "Do you think people work too hard nowadays?", keys: ["work", "hard", "busy", "balance", "lifestyle", "office"] } ], advanced: [ { q: "Discuss the pros and cons of Artificial Intelligence.", keys: ["intelligence", "automation", "future", "ethics", "advantage"] }, { q: "Describe a significant challenge you overcame.", keys: ["challenge", "overcome", "resilience", "problem", "solve"] }, { q: "Should university education be free for everyone?", keys: ["education", "university", "government", "tax", "opportunity"] }, { q: "How does social media affect our mental health?", keys: ["social media", "mental health", "anxiety", "platform", "impact", "user"] }, { q: "Discuss the importance of environmental conservation.", keys: ["environment", "conservation", "nature", "planet", "protection", "global"] }, { q: "How will technology change the job market in the future?", keys: ["technology", "job", "market", "future", "career", "skills"] } ] };
 
-// --- 3. SPEECH RECOGNITION SETUP (PERBAIKAN HP) ---
+// --- 3. SPEECH RECOGNITION SETUP (PERBAIKAN MOBILE) ---
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 if (SpeechRecognition) {
@@ -64,8 +64,8 @@ if (SpeechRecognition) {
     recognition.lang = 'en-US';
 
     recognition.onresult = (event) => {
-        // PERBAIKAN: Volume HP sering kecil, ambang diturunkan agar transkrip nulis
-        if (currentVolume < 1) return; 
+        // PERBAIKAN KRUSIAL: Hapus volume check yang terlalu strict!
+        // Volume mic mobile sangat kecil, jadi kita ga pake volume threshold
 
         lastSpeechTimestamp = Date.now();
         let interimTranscript = "";
@@ -83,8 +83,13 @@ if (SpeechRecognition) {
                 transcript = transcript.replace(rule.pattern, `<span style="color:#ef4444; text-decoration:underline; font-weight:bold;">$&</span>`);
             });
 
-            if (event.results[i].isFinal) finalTranscript += transcript + " ";
-            else interimTranscript += transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript + " ";
+                // PERBAIKAN: Log untuk debug
+                console.log("Final transcript captured:", transcript);
+            } else {
+                interimTranscript += transcript;
+            }
         }
 
         const liveDiv = document.getElementById('transcript-live');
@@ -96,28 +101,58 @@ if (SpeechRecognition) {
 
     recognition.onerror = (event) => {
         console.error("Speech Error: " + event.error);
+        // PERBAIKAN: Tampilkan error ke user
+        const statusMsg = document.getElementById('status-msg');
+        if (statusMsg) {
+            statusMsg.innerText = "⚠️ Speech recognition error. Try again.";
+            statusMsg.style.color = "#ef4444";
+        }
+    };
+
+    recognition.onend = () => {
+        // PERBAIKAN: Auto-restart jika masih recording
+        if (isRecording) {
+            console.log("Recognition ended, restarting...");
+            try {
+                recognition.start();
+            } catch (e) {
+                console.log("Recognition restart failed:", e);
+            }
+        }
     };
 } else {
     alert("Your browser does not support Speech Recognition. Please use Chrome or Safari.");
 }
 
-// --- 4. AUDIO & WAVEFORM (PERBAIKAN HP) ---
+// --- 4. AUDIO & WAVEFORM (PERBAIKAN MOBILE) ---
 async function startNoiseGate() {
     try {
         if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
         // KRUSIAL UNTUK HP: AudioContext harus di-resume dalam user gesture
-        if (audioContext.state === 'suspended') await audioContext.resume();
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+            console.log("AudioContext resumed");
+        }
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            } 
+        });
+        
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
         analyser.fftSize = 256;
         microphone.connect(analyser);
         
+        console.log("Audio initialized successfully");
         updateVolumeMeter();
         drawWaveform();
     } catch (err) { 
+        console.error("Microphone access error:", err);
         alert("Please allow microphone access!"); 
     }
 }
@@ -169,22 +204,41 @@ function analyzeSpeaking(text) {
     return "valid";
 }
 
-// TOGGLE RECORDING (PERBAIKAN HP)
+// TOGGLE RECORDING (PERBAIKAN MOBILE)
 async function toggleRecording() {
     const btn = document.getElementById('record-btn');
+    const statusMsg = document.getElementById('status-msg');
+    
     if (!isRecording) {
-        // PERBAIKAN: Di HP, Audio & Recog harus dipicu dalam satu klik
+        // START RECORDING
         isRecording = true;
         btn.innerHTML = '<i class="fas fa-stop"></i>';
         btn.style.backgroundColor = "#ef4444";
+        if (statusMsg) {
+            statusMsg.innerText = "🎙️ Recording... Speak now";
+            statusMsg.style.color = "#ef4444";
+        }
         
+        // PERBAIKAN: Start audio first
         await startNoiseGate(); 
+        
+        // PERBAIKAN: Small delay before starting recognition
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         lastSpeechTimestamp = Date.now();
         silencePenalty = 0;
         finalTranscript = ""; 
         
-        if (recognition) recognition.start();
+        // PERBAIKAN: Try-catch untuk recognition start
+        try {
+            if (recognition) {
+                recognition.start();
+                console.log("Speech recognition started");
+            }
+        } catch (e) {
+            console.error("Recognition start error:", e);
+            // Mungkin sudah started, coba lanjutkan
+        }
         
         timerInterval = setInterval(() => {
             seconds++;
@@ -192,13 +246,37 @@ async function toggleRecording() {
             if ((Date.now() - lastSpeechTimestamp) / 1000 > 5) silencePenalty += 0.2;
         }, 1000);
     } else {
+        // STOP RECORDING
         isRecording = false;
         btn.innerHTML = '<i class="fas fa-microphone"></i>';
         btn.style.backgroundColor = "#4f46e5";
-        if (recognition) recognition.stop();
+        if (statusMsg) {
+            statusMsg.innerText = "✅ Recording stopped";
+            statusMsg.style.color = "#22c55e";
+        }
+        
+        if (recognition) {
+            try {
+                recognition.stop();
+                console.log("Speech recognition stopped");
+            } catch (e) {
+                console.error("Recognition stop error:", e);
+            }
+        }
+        
         clearInterval(timerInterval);
         cancelAnimationFrame(animationId);
-        if (audioContext) audioContext.close().then(() => audioContext = null);
+        
+        if (audioContext) {
+            audioContext.close().then(() => {
+                audioContext = null;
+                console.log("AudioContext closed");
+            });
+        }
+        
+        // PERBAIKAN: Log transcript untuk debug
+        console.log("Final transcript on stop:", finalTranscript);
+        
         document.getElementById('next-btn').classList.remove('hidden');
     }
 }
@@ -207,6 +285,11 @@ async function toggleRecording() {
 function nextQuestion() {
     const text = finalTranscript.toLowerCase().trim();
     const cleanText = text.replace(/<[^>]*>/g, ""); 
+    
+    // PERBAIKAN: Log untuk debug
+    console.log("Processing transcript:", cleanText);
+    console.log("Word count:", cleanText.split(/\s+/).length);
+    
     const wordsArray = cleanText.split(/\s+/).filter(w => w.length > 2);
     const wordCount = wordsArray.length;
     const currentQ = shuffledQuestions[questionIndex];
@@ -277,7 +360,12 @@ function nextQuestion() {
     
     let developmentBonus = (wordsArray.length >= 50 && argumentationCount >= 2 && complexStructureCount >= 3) ? 0.5 : (wordsArray.length >= 30 && (argumentationCount >= 1 || complexStructureCount >= 2) ? 0.3 : (wordsArray.length >= 20 ? 0.1 : 0));
 
-    currentSessionTranscript += `Q: ${currentQ.q}\nA: ${cleanText}\n\n`;
+    // PERBAIKAN: Simpan transcript dengan format yang lebih baik
+    const questionText = currentQ.q;
+    const answerText = cleanText || "(no speech detected)";
+    currentSessionTranscript += `Q${questionIndex + 1}: ${questionText}\nA: ${answerText}\n\n`;
+    
+    console.log("Transcript so far:", currentSessionTranscript);
 
     let fluency, pron, vocab, grammar;
     if (wordsArray.length < 5) {
@@ -308,8 +396,15 @@ function nextQuestion() {
         fluency: limit(fluency), pron: limit(pron), vocab: limit(vocab), grammar: limit(grammar)
     });
 
-    if (questionIndex < 2) { questionIndex++; loadQuestion(); } 
-    else { localStorage.setItem('last_transcript_history', currentSessionTranscript); finishTest(); }
+    if (questionIndex < 2) { 
+        questionIndex++; 
+        loadQuestion(); 
+    } else { 
+        // PERBAIKAN: Pastikan transcript disimpan sebelum finish
+        console.log("Saving transcript to localStorage:", currentSessionTranscript);
+        localStorage.setItem('last_transcript_history', currentSessionTranscript); 
+        finishTest(); 
+    }
 }
 
 // FINISH TEST, AUTH, NAV, WINDOW ONLOAD TETAP SAMA
@@ -348,43 +443,20 @@ async function handleLogin() {
     try {
         const res = await fetch(WEB_APP_URL + "?action=getUsers");
         const users = await res.json();
-        if (users.includes(email)) {
-            activeUserEmail = email; localStorage.setItem('isLoggedInEmail', email);
-            alert("Login Successful!"); location.reload();
-        } else { alert("ACCESS DENIED: Email not registered or approved."); }
-    } catch (e) { alert("Server error. Check your internet connection."); }
-    finally { btn.innerText = "Sign In"; btn.disabled = false; }
-}
-
-async function handleSignUpSheet() {
-    const name = document.getElementById('reg-name').value;
-    const email = document.getElementById('reg-email').value.toLowerCase().trim();
-    const wa = document.getElementById('reg-wa').value;
-    const params = new URLSearchParams({ action: "addUser", name, email, wa });
-    await fetch(WEB_APP_URL + "?" + params.toString(), { mode: 'no-cors' });
-    document.getElementById('reg-inputs').classList.add('hidden');
-    document.getElementById('reg-success').classList.remove('hidden');
-}
-
-function handleSignUpWA() {
-    const name = document.getElementById('reg-name').value;
-    window.open(`https://wa.me/6281232339403?text=Halo Mr. Adi, saya ${name} sudah daftar.`, '_blank');
-}
-
-async function saveResultToSheet(data) {
-    const email = activeUserEmail || localStorage.getItem('isLoggedInEmail');
-    const params = new URLSearchParams({ action: "saveResult", email, ...data });
-    fetch(WEB_APP_URL + "?" + params.toString(), { mode: 'no-cors' });
-}
-
-function showAuth() {
-    const landing = document.getElementById('landing-page');
-    document.getElementById('main-footer').classList.add('hidden');
-    if (landing) landing.classList.add('hidden');
-    const navBtn = document.getElementById('nav-login-btn');
-    if (navBtn) navBtn.classList.add('hidden');
-    const authSec = document.getElementById('auth-section');
-    if (authSec) authSec.classList.remove('hidden');
+        const user = users.find(u => u.email.toLowerCase() === email && u.password === pass);
+        if (user) {
+            localStorage.setItem('isLoggedInEmail', email);
+            activeUserEmail = email;
+            document.getElementById('auth-section').classList.add('hidden');
+            document.getElementById('level-section').classList.remove('hidden');
+        } else {
+            alert("Invalid Email or Password!");
+            btn.innerText = "Sign In"; btn.disabled = false;
+        }
+    } catch (err) {
+        alert("Login failed. Check connection!");
+        btn.innerText = "Sign In"; btn.disabled = false;
+    }
 }
 
 function toggleAuthMode() {
@@ -392,26 +464,84 @@ function toggleAuthMode() {
     document.getElementById('signup-form').classList.toggle('hidden');
 }
 
+async function handleSignUpSheet() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.toLowerCase().trim();
+    const wa = document.getElementById('reg-wa').value.trim();
+    if (!name || !email || !wa) return alert("Please fill all fields!");
+    const btn = document.getElementById('signup-btn');
+    btn.innerText = "Saving..."; btn.disabled = true;
+    try {
+        const formData = new FormData();
+        formData.append('action', 'signup');
+        formData.append('name', name);
+        formData.append('email', email);
+        formData.append('wa', wa);
+        await fetch(WEB_APP_URL, { method: "POST", body: formData });
+        document.getElementById('reg-inputs').classList.add('hidden');
+        document.getElementById('reg-success').classList.remove('hidden');
+    } catch (err) { alert("Failed to save data!"); btn.innerText = "Register Now"; btn.disabled = false; }
+}
+
+function handleSignUpWA() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const msg = `Hi Admin, I just registered with:
+Name: ${name}
+Email: ${email}
+Please activate my account. Thanks!`;
+    window.open(`https://wa.me/6281232339403?text=${encodeURIComponent(msg)}`);
+}
+
+function showAuth() {
+    document.getElementById('landing-page').classList.add('hidden');
+    document.getElementById('main-footer').classList.add('hidden');
+    document.getElementById('nav-login-btn').classList.add('hidden');
+    document.getElementById('auth-section').classList.remove('hidden');
+}
+
+async function saveResultToSheet(data) {
+    const formData = new FormData();
+    formData.append('action', 'saveResult');
+    formData.append('email', activeUserEmail);
+    formData.append('level', currentLevel);
+    formData.append('overall', data.overall);
+    formData.append('fluency', data.fluency);
+    formData.append('vocab', data.vocab);
+    formData.append('grammar', data.grammar);
+    formData.append('pron', data.pron);
+    formData.append('date', new Date().toISOString().split('T')[0]);
+    try { await fetch(WEB_APP_URL, { method: "POST", body: formData }); } catch (err) { console.error(err); }
+}
+
 function startTest(level) {
     currentLevel = level;
-    const allQuestions = questionBank[level];
-    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-    shuffledQuestions = shuffled.slice(0, 3);
-    questionIndex = 0; sessionScores = []; 
-    document.getElementById('level-tag').innerText = level.toUpperCase();
+    sessionScores = [];
+    questionIndex = 0;
+    currentSessionTranscript = ""; // PERBAIKAN: Reset transcript
+    shuffledQuestions = [...questionBank[level]].sort(() => Math.random() - 0.5);
     document.getElementById('level-section').classList.add('hidden');
     document.getElementById('test-section').classList.remove('hidden');
     loadQuestion();
 }
 
 function loadQuestion() {
-    const data = shuffledQuestions[questionIndex];
-    document.getElementById('question-text').innerText = data.q;
-    document.getElementById('required-keywords').innerText = data.keys.join(", ");
-    document.getElementById('question-count').innerText = `Question ${questionIndex + 1} of 3`;
-    finalTranscript = ""; seconds = 0; silencePenalty = 0;
+    seconds = 0;
+    finalTranscript = "";
+    document.getElementById('timer').innerText = "00:00";
+    document.getElementById('question-count').innerText = `Question ${questionIndex + 1}/3`;
+    document.getElementById('level-tag').innerText = currentLevel.toUpperCase();
+    document.getElementById('question-text').innerText = shuffledQuestions[questionIndex].q;
+    document.getElementById('required-keywords').innerText = shuffledQuestions[questionIndex].keys.join(', ');
     document.getElementById('transcript-live').innerText = "Waiting...";
     document.getElementById('next-btn').classList.add('hidden');
+    
+    // PERBAIKAN: Reset status message
+    const statusMsg = document.getElementById('status-msg');
+    if (statusMsg) {
+        statusMsg.innerText = "Click to speak";
+        statusMsg.style.color = "#64748b";
+    }
 }
 
 function goBackToLevels() { location.reload(); }
@@ -442,11 +572,18 @@ window.onload = () => {
         document.getElementById('nav-login-btn').classList.add('hidden');
         document.getElementById('auth-section').classList.add('hidden');
         document.getElementById('level-section').classList.remove('hidden');
+        
+        // PERBAIKAN: Tampilkan transcript history dengan better formatting
         const historyData = localStorage.getItem('last_transcript_history');
         const historyDiv = document.getElementById('history-content');
         if (historyData && historyDiv) {
-            historyDiv.innerText = historyData;
+            // Format transcript dengan line breaks untuk readability
+            const formattedHistory = historyData.replace(/\n/g, '<br>');
+            historyDiv.innerHTML = formattedHistory;
             document.getElementById('transcript-history').classList.remove('hidden');
+            console.log("Transcript history loaded successfully");
+        } else {
+            console.log("No transcript history found");
         }
     } else {
         document.getElementById('landing-page').classList.remove('hidden');
