@@ -443,19 +443,19 @@ async function handleLogin() {
     try {
         const res = await fetch(WEB_APP_URL + "?action=getUsers");
         const users = await res.json();
-        const user = users.find(u => u.email.toLowerCase() === email && u.password === pass);
-        if (user) {
-            localStorage.setItem('isLoggedInEmail', email);
+        if (users.includes(email)) {
             activeUserEmail = email;
-            document.getElementById('auth-section').classList.add('hidden');
-            document.getElementById('level-section').classList.remove('hidden');
+            localStorage.setItem('isLoggedInEmail', email);
+            alert("Login Successful!");
+            location.reload();
         } else {
-            alert("Invalid Email or Password!");
-            btn.innerText = "Sign In"; btn.disabled = false;
+            alert("ACCESS DENIED: Email not registered or approved.");
         }
-    } catch (err) {
-        alert("Login failed. Check connection!");
-        btn.innerText = "Sign In"; btn.disabled = false;
+    } catch (e) {
+        alert("Server error. Check your internet connection.");
+    } finally {
+        btn.innerText = "Sign In";
+        btn.disabled = false;
     }
 }
 
@@ -472,25 +472,20 @@ async function handleSignUpSheet() {
     const btn = document.getElementById('signup-btn');
     btn.innerText = "Saving..."; btn.disabled = true;
     try {
-        const formData = new FormData();
-        formData.append('action', 'signup');
-        formData.append('name', name);
-        formData.append('email', email);
-        formData.append('wa', wa);
-        await fetch(WEB_APP_URL, { method: "POST", body: formData });
+        const params = new URLSearchParams({ action: "addUser", name, email, wa });
+        await fetch(WEB_APP_URL + "?" + params.toString(), { mode: 'no-cors' });
         document.getElementById('reg-inputs').classList.add('hidden');
         document.getElementById('reg-success').classList.remove('hidden');
-    } catch (err) { alert("Failed to save data!"); btn.innerText = "Register Now"; btn.disabled = false; }
+    } catch (err) {
+        alert("Failed to save data!");
+        btn.innerText = "Register Now";
+        btn.disabled = false;
+    }
 }
 
 function handleSignUpWA() {
     const name = document.getElementById('reg-name').value.trim();
-    const email = document.getElementById('reg-email').value.trim();
-    const msg = `Hi Admin, I just registered with:
-Name: ${name}
-Email: ${email}
-Please activate my account. Thanks!`;
-    window.open(`https://wa.me/6281232339403?text=${encodeURIComponent(msg)}`);
+    window.open(`https://wa.me/6281232339403?text=Halo Mr. Adi, saya ${name} sudah daftar.`, '_blank');
 }
 
 function showAuth() {
@@ -501,25 +496,30 @@ function showAuth() {
 }
 
 async function saveResultToSheet(data) {
-    const formData = new FormData();
-    formData.append('action', 'saveResult');
-    formData.append('email', activeUserEmail);
-    formData.append('level', currentLevel);
-    formData.append('overall', data.overall);
-    formData.append('fluency', data.fluency);
-    formData.append('vocab', data.vocab);
-    formData.append('grammar', data.grammar);
-    formData.append('pron', data.pron);
-    formData.append('date', new Date().toISOString().split('T')[0]);
-    try { await fetch(WEB_APP_URL, { method: "POST", body: formData }); } catch (err) { console.error(err); }
+    const email = activeUserEmail || localStorage.getItem('isLoggedInEmail');
+    const params = new URLSearchParams({ 
+        action: "saveResult", 
+        email, 
+        level: currentLevel,
+        overall: data.overall,
+        fluency: data.fluency,
+        vocab: data.vocab,
+        grammar: data.grammar,
+        pron: data.pron,
+        date: new Date().toISOString().split('T')[0]
+    });
+    fetch(WEB_APP_URL + "?" + params.toString(), { mode: 'no-cors' });
 }
 
 function startTest(level) {
     currentLevel = level;
-    sessionScores = [];
+    const allQuestions = questionBank[level];
+    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
+    shuffledQuestions = shuffled.slice(0, 3);
     questionIndex = 0;
+    sessionScores = [];
     currentSessionTranscript = ""; // PERBAIKAN: Reset transcript
-    shuffledQuestions = [...questionBank[level]].sort(() => Math.random() - 0.5);
+    document.getElementById('level-tag').innerText = level.toUpperCase();
     document.getElementById('level-section').classList.add('hidden');
     document.getElementById('test-section').classList.remove('hidden');
     loadQuestion();
