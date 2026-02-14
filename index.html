@@ -301,18 +301,41 @@ footer {
         }
 
         /* Test UI */
-        #transcript-live { 
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); 
-            padding: 28px; 
-            border-radius: 18px; 
-            min-height: 120px; 
-            text-align: left; 
-            border: 2px dashed #cbd5e1; 
-            margin: 20px 0; 
-            line-height: 1.7; 
-            font-style: italic;
-            color: var(--text-light);
+        #transcript-live {
+    min-height: 120px;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 15px;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+/* Optional: Add animation */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+#transcript-live.recording {
+    animation: pulse 2s infinite;
+}
+
+        /* IMPROVEMENT: Hide grammar status completely since we don't use it anymore */
+        #grammar-status {
+            display: none !important;
         }
+
+        /* IMPROVEMENT: Better status message styling */
+        #status-msg {
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+
         .timer { 
             font-size: 56px; 
             font-weight: 800; 
@@ -712,6 +735,14 @@ footer {
     <!-- TEST -->
     <section id="test-section" class="hidden">
         <button onclick="goBackToLevels()" style="background:none; border:none; cursor:pointer; color:var(--primary); font-weight:700; margin-bottom:10px;"><i class="fas fa-arrow-left"></i> CHANGE LEVEL</button>
+        
+        <!-- IMPROVEMENT: Browser compatibility note -->
+        <div style="background:#fef3c7; border:2px solid #fbbf24; border-radius:12px; padding:15px; margin-bottom:20px; text-align:center;">
+            <p style="margin:0; color:#92400e; font-size:13px; font-weight:600;">
+                💡 <strong>Best Experience:</strong> Use Chrome or Safari browser. Make sure to allow microphone access when prompted.
+            </p>
+        </div>
+        
         <div class="card test-card">
             <div style="display:flex; justify-content: space-between; margin-bottom:20px;"><span id="question-count" style="font-weight:700; color:var(--primary)"></span><span id="level-tag" style="font-size:12px; background:var(--light); padding:5px 12px; border-radius:20px; font-weight:700;"></span></div>
             <h2 id="question-text" style="font-family:'Playfair Display'; margin-bottom:10px;"></h2>
@@ -724,7 +755,7 @@ footer {
             <div class="timer" id="timer">00:00</div>
 
             <button id="record-btn" class="btn" style="border-radius:50%; width:80px; height:80px; background:var(--primary); color:white; justify-content:center; font-size:24px;" onclick="toggleRecording()"><i class="fas fa-microphone"></i></button>
-            <p id="status-msg" style="font-size:13px; color:#64748b; margin-top:15px;">Click to speak</p>
+            <p id="status-msg" style="font-size:14px; color:#64748b; margin-top:15px; font-weight:600;">🎤 Click microphone to start recording</p>
             <button id="next-btn" class="btn btn-primary hidden" style="margin-top:20px;" onclick="nextQuestion()">Next Question <i class="fas fa-chevron-right"></i></button>
         </div>
     </section>

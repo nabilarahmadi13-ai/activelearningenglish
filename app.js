@@ -123,10 +123,17 @@ if (SpeechRecognition) {
             }
         }
 
-        const liveDiv = document.getElementById('transcript-live');
-        if (liveDiv) {
-            liveDiv.innerHTML = `<span style="color:#1e293b">${finalTranscript}</span><span style="color:#94a3b8">${interimTranscript}</span>`;
-            console.log("✅ UI Updated with transcript");
+        // PERBAIKAN: Update simple status instead of showing full transcript
+        const wordCount = finalTranscript.trim().split(/\s+/).filter(w => w.length > 0).length;
+        const statusDiv = document.getElementById('transcript-live');
+        if (statusDiv) {
+            // Show simple feedback: word count + encouraging message
+            let message = "🎤 <strong>Recording...</strong> Keep speaking!";
+            if (wordCount > 0) {
+                message = `✅ <strong>${wordCount} words captured</strong> - Great! Continue...`;
+            }
+            statusDiv.innerHTML = `<div style="text-align:center; padding:20px; background:#f0fdf4; border-radius:12px; border:2px solid #86efac;">${message}</div>`;
+            console.log("✅ UI Updated - Word count:", wordCount);
         } else {
             console.error("❌ transcript-live div not found!");
             updateDebugInfo("❌ transcript-live div not found!", "error");
@@ -199,8 +206,13 @@ if (SpeechRecognition) {
         updateDebugInfo("🗣️ Speech started!", "success");
         const statusMsg = document.getElementById('status-msg');
         if (statusMsg) {
-            statusMsg.innerHTML = "🗣️ <strong>SPEECH DETECTED!</strong>";
+            statusMsg.innerHTML = "🗣️ <strong>SPEECH DETECTED!</strong> Keep going!";
             statusMsg.style.color = "#22c55e";
+        }
+        // Update live div to show active state
+        const liveDiv = document.getElementById('transcript-live');
+        if (liveDiv) {
+            liveDiv.innerHTML = '<div style="text-align:center; padding:20px; background:#dcfce7; border-radius:12px; border:2px solid #22c55e;"><span style="color:#166534; font-size:15px;">🗣️ <strong>Great! I hear you...</strong> Continue speaking!</span></div>';
         }
     };
     
@@ -321,17 +333,18 @@ function drawWaveform() {
     ctx.lineTo(canvas.width, canvas.height / 2); ctx.stroke();
 }
 
-// CORE TEST LOGIC UTUH
+// CORE TEST LOGIC - SILENT MODE (NO REAL-TIME FEEDBACK)
 function analyzeSpeaking(text) {
     if (text.length < 5) return "too_short";
-    const statusDiv = document.getElementById('grammar-status');
-    if (!statusDiv) return;
-    statusDiv.style.display = "block";
+    
+    // Silent analysis - no UI feedback during recording
+    // Just log for debugging
     if (/\b(saya|adalah|yang|untuk|dengan|bisa|ini|itu)\b/i.test(text)) {
-        statusDiv.innerHTML = "❌ Indonesian detected! Use English.";
+        console.log("⚠️ Indonesian detected in transcript");
         return "invalid_lang";
     }
-    statusDiv.innerHTML = "✅ Processing speech patterns...";
+    
+    console.log("✅ Speech analysis OK");
     return "valid";
 }
 
@@ -377,7 +390,7 @@ async function toggleRecording() {
         // Update UI
         const liveDiv = document.getElementById('transcript-live');
         if (liveDiv) {
-            liveDiv.innerHTML = '<span style="color:#94a3b8;">Listening... Speak now!</span>';
+            liveDiv.innerHTML = '<div style="text-align:center; padding:20px; background:#fef3c7; border-radius:12px; border:2px solid #fbbf24;"><span style="color:#92400e; font-size:15px;">🎤 <strong>Listening...</strong> Start speaking now!</span></div>';
         }
         console.log("✅ Step 3 complete");
         
@@ -467,9 +480,24 @@ async function toggleRecording() {
         // Log final state
         console.log("📊 Final state:");
         console.log("- Final transcript:", finalTranscript);
-        console.log("- Word count:", finalTranscript.split(/\s+/).length);
+        const wordCount = finalTranscript.trim().split(/\s+/).filter(w => w.length > 0).length;
+        console.log("- Word count:", wordCount);
         console.log("- Duration:", seconds, "seconds");
-        updateDebugInfo(`📊 Words: ${finalTranscript.split(/\s+/).length}, Duration: ${seconds}s`, "info");
+        updateDebugInfo(`📊 Words: ${wordCount}, Duration: ${seconds}s`, "info");
+        
+        // Show summary to user
+        const liveDiv = document.getElementById('transcript-live');
+        if (liveDiv) {
+            liveDiv.innerHTML = `
+                <div style="text-align:center; padding:20px; background:#dbeafe; border-radius:12px; border:2px solid #3b82f6;">
+                    <div style="color:#1e40af; font-size:16px; font-weight:700; margin-bottom:10px;">✅ Recording Complete!</div>
+                    <div style="color:#1e40af; font-size:14px;">
+                        <strong>${wordCount}</strong> words captured in <strong>${seconds}</strong> seconds
+                    </div>
+                    <div style="color:#64748b; font-size:12px; margin-top:8px;">Click "Next Question" to continue</div>
+                </div>
+            `;
+        }
         
         if (statusMsg) {
             statusMsg.innerHTML = "✅ Recording complete! Click Next to continue.";
@@ -740,7 +768,7 @@ function loadQuestion() {
     
     const liveDiv = document.getElementById('transcript-live');
     if (liveDiv) {
-        liveDiv.innerHTML = '<span style="color:#94a3b8;">Ready to record. Click the microphone button.</span>';
+        liveDiv.innerHTML = '<div style="text-align:center; padding:20px; background:#f8fafc; border-radius:12px; border:2px dashed #cbd5e1;"><span style="color:#64748b; font-size:15px;">📝 Ready to record. Click the microphone to start!</span></div>';
     }
     
     document.getElementById('next-btn').classList.add('hidden');
